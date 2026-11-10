@@ -1,0 +1,653 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>ChemBond Simulation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: one-column workbench. Header with progress, level tabs, compound chips, then a single question card built around periodic-table style atom tiles.
+   Committed light-only look (the brief asks for a bright, high-contrast academic interface). */
+:root{
+  --bg:#F3F6FB; --surface:#FFFFFF; --ink:#0C1A2E; --muted:#41536B; --line:#C9D5E4;
+  --accent:#0B57C4; --accent-ink:#FFFFFF; --accent-soft:#E6EFFC; --accent-line:#9DBCEB;
+  --neg:#B3261E; --neg-soft:#FCECEA; --good:#146338; --good-soft:#E3F3E9; --info:#6B4A00; --info-soft:#FFF3D6;
+  --z1:#DCE8F8; --z2:#9CBDEF; --z3:#3F78CF; --bar:#A9BCD6;
+  --f-body:'IBM Plex Sans Arabic','Segoe UI',Tahoma,system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--f-body); font-size:16px; line-height:1.75;
+  padding-block:20px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.shell{max-width:760px;margin-inline:auto;display:flex;flex-direction:column;gap:18px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button{font-family:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+sub,sup{line-height:0}
+
+/* header */
+.top{display:flex;flex-direction:column;gap:10px;padding-bottom:16px;border-bottom:2px solid var(--ink)}
+.eyebrow{font:600 13px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{margin:0;font-size:28px;line-height:1.35;font-weight:700;text-wrap:balance}
+.lede{margin:0;font-size:16px;color:var(--muted);max-width:60ch}
+.meter{margin-top:6px;display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.mrow{display:flex;justify-content:space-between;gap:12px;font-size:15px;font-weight:600}
+.mrow.sm{font-size:14px;font-weight:500;color:var(--muted)}
+.mrow b{color:var(--ink)}
+.track{height:8px;border-radius:4px;background:var(--z1);overflow:hidden;direction:ltr}
+.track i{display:block;height:100%;background:var(--accent);border-radius:4px}
+
+/* levels + chips */
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lv{display:flex;flex-direction:column;align-items:flex-start;gap:0;text-align:start;min-width:0;padding:10px 12px;background:var(--surface);border:1.5px solid var(--line);border-radius:8px;cursor:pointer;min-height:84px}
+.lv .lvn{font-weight:700;font-size:15px;line-height:1.4}
+.lv .lvt{font-size:13px;color:var(--muted);line-height:1.4}
+.lv .lvc{margin-top:auto;font-size:13px;font-weight:600;color:var(--accent)}
+.lv.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.lv.on .lvt,.lv.on .lvc{color:var(--accent-ink)}
+.ldesc{margin:0;font-size:15px;color:var(--muted)}
+.chips{display:flex;flex-direction:column;gap:10px}
+.chiprow{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:8px;min-height:46px;padding:6px 16px;border:1.5px solid var(--line);background:var(--surface);border-radius:8px;font-size:18px;font-weight:600;cursor:pointer}
+.chip.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.chip .ck{color:var(--good);font-size:16px}
+
+/* card */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 16px;display:flex;flex-direction:column;gap:18px}
+.chead{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.formula{font:700 44px/1.1 var(--f-body);letter-spacing:.01em;padding:6px 16px;border:2px solid var(--ink);border-radius:8px;min-width:96px;text-align:center}
+.formula.m{font-size:24px}
+.cmeta{min-width:0;flex:1 1 200px}
+.cbond{font-weight:600;font-size:16px}
+.cnote{margin:2px 0 0;color:var(--muted);font-size:15px}
+
+/* atom tiles */
+.pair{display:flex;align-items:stretch;gap:0}
+.tile{position:relative;flex:1;min-width:0;border:1.5px solid var(--ink);border-radius:6px;background:var(--surface);text-align:center;padding:22px 8px 10px}
+.tile .z{position:absolute;top:7px;left:10px;font:600 13px var(--f-mono);color:var(--muted)}
+.tile .sym{display:block;font:700 40px/1.1 var(--f-body)}
+.tile .nm{display:block;font-size:14px;color:var(--muted)}
+.tile .en{display:block;margin-top:6px;font:600 17px var(--f-mono);color:var(--accent)}
+.tile .en small{font-size:12px;color:var(--muted);font-weight:500;margin-right:4px}
+.link{flex:0 0 36px;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--ink);font-weight:700}
+
+/* stepper */
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
+.steps li{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;font-size:13.5px;line-height:1.4;color:var(--muted);padding:8px 4px;border-top:4px solid var(--line)}
+.steps .num{display:inline-flex;width:28px;height:28px;border-radius:50%;align-items:center;justify-content:center;font:700 14px var(--f-mono);border:2px solid var(--line);background:var(--surface);color:var(--muted)}
+.steps li.cur{border-top-color:var(--accent);color:var(--ink);font-weight:700}
+.steps li.cur .num{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.steps li.done{border-top-color:var(--good);color:var(--good)}
+.steps li.done .num{background:var(--good);border-color:var(--good);color:#fff}
+
+/* question */
+.qwrap{display:flex;flex-direction:column;gap:16px}
+.req{background:var(--accent-soft);border:1.5px solid var(--accent-line);border-radius:8px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px}
+.rtag{align-self:flex-start;background:var(--accent);color:var(--accent-ink);font-size:14px;font-weight:700;padding:1px 12px;border-radius:4px;line-height:1.7}
+.rmain{margin:0;font-size:19px;line-height:1.7;font-weight:600;color:var(--ink)}
+.how{margin:0;padding-inline-start:22px;display:flex;flex-direction:column;gap:2px;font-size:16.5px;font-weight:500}
+.how li::marker{font-weight:700;color:var(--accent)}
+.goal{margin:0;font-size:15px;color:var(--muted);border-top:1px dashed var(--accent-line);padding-top:8px}
+.goal b{color:var(--ink)}
+.work{display:flex;flex-direction:column;gap:14px}
+.calc{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font:600 22px var(--f-mono);direction:ltr;justify-content:flex-end}
+.calc .n{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 10px}
+input.ans,input.cell{font:600 22px var(--f-mono);direction:ltr;text-align:center;border:2px solid var(--ink);border-radius:8px;background:#fff;color:var(--ink);height:52px;width:120px;padding:0 8px}
+input.cell{width:92px;height:46px;font-size:19px}
+input.ans:focus,input.cell:focus{outline:3px solid var(--accent);outline-offset:1px}
+input.ok,input.cell.ok{border-color:var(--good);background:var(--good-soft);color:var(--good)}
+input.bad,input.cell.bad{border-color:var(--neg);background:var(--neg-soft)}
+.btn{min-height:50px;padding:8px 22px;border-radius:8px;border:2px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:17px;font-weight:700;cursor:pointer}
+.btn.alt{background:var(--surface);color:var(--accent)}
+.btn.full{width:100%}
+.btnrow{display:flex;flex-wrap:wrap;gap:10px}
+
+/* options */
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;align-items:center;gap:14px;text-align:start;min-height:64px;padding:10px 14px;border:2px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;width:100%}
+.opt .rd{flex:0 0 22px;height:22px;border-radius:50%;border:2.5px solid var(--muted);background:#fff}
+.opt .ot{display:flex;flex-direction:column;min-width:0}
+.opt .oen{font-weight:700;font-size:18px;line-height:1.4}
+.opt .oar{font-size:15.5px;color:var(--muted);line-height:1.4}
+.opt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.opt.sel .rd{border-color:var(--accent);background:radial-gradient(circle,var(--accent) 0 45%,#fff 50%)}
+.opt.right{border-color:var(--good);background:var(--good-soft)}
+.opt.right .rd{border-color:var(--good);background:radial-gradient(circle,var(--good) 0 45%,#fff 50%)}
+.opt:disabled{cursor:default}
+.opt:disabled:not(.right){opacity:.55}
+.ranges{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.rtitle{background:var(--bg);font-weight:700;font-size:15px;padding:6px 12px;border-bottom:1px solid var(--line)}
+.ranges table{width:100%;border-collapse:collapse;font-size:15.5px}
+.ranges td{padding:7px 12px;border-bottom:1px solid var(--line)}
+.ranges tr:last-child td{border-bottom:0}
+.ranges td:last-child{font:600 15px var(--f-mono);direction:ltr;text-align:right;white-space:nowrap}
+.scale{padding:22px 4px 0}
+.zwrap{position:relative}
+.zones{display:flex;height:16px;border-radius:8px;overflow:hidden}
+.zones i{display:block}
+.zones .z1{background:var(--z1)}.zones .z2{background:var(--z2)}.zones .z3{background:var(--z3)}
+.mk{position:absolute;top:-6px;width:4px;height:28px;background:var(--ink);border-radius:2px;transform:translateX(-50%)}
+.mk span{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);font:700 14px var(--f-mono);background:var(--ink);color:#fff;border-radius:4px;padding:0 6px;line-height:1.6;white-space:nowrap}
+.ticks{position:relative;height:22px;font:500 12.5px var(--f-mono);color:var(--muted);margin-top:6px}
+.ticks span{position:absolute;transform:translateX(-50%)}
+
+/* bond svg */
+.bondbox{border:1px solid var(--line);border-radius:8px;background:#fff;padding:6px}
+svg.bond{display:block;width:100%;height:auto;max-width:460px;margin-inline:auto}
+svg.bond .bline{stroke:var(--ink);stroke-width:6;stroke-linecap:round}
+svg.bond .atom circle.body{fill:#fff;stroke:var(--accent);stroke-width:3}
+svg.bond .atom.live{cursor:pointer}
+svg.bond .atom.live:hover circle.body{fill:var(--accent-soft)}
+svg.bond .atom:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:4px}
+svg.bond text{font-family:var(--f-body)}
+svg.bond .sym{font-size:28px;font-weight:700;fill:var(--ink);text-anchor:middle;dominant-baseline:central}
+svg.bond .en{font:600 14px var(--f-mono);fill:var(--muted);text-anchor:middle}
+svg.bond .slot circle{fill:#fff;stroke:var(--muted);stroke-width:2;stroke-dasharray:4 4}
+svg.bond .slot.target circle{stroke:var(--accent);stroke-width:3}
+svg.bond .slot.neg circle{fill:var(--neg-soft);stroke:var(--neg);stroke-dasharray:none;stroke-width:3}
+svg.bond .slot.pos circle{fill:var(--accent-soft);stroke:var(--accent);stroke-dasharray:none;stroke-width:3}
+svg.bond .tk{font:700 21px var(--f-mono);text-anchor:middle;dominant-baseline:central}
+svg.bond .tk.neg{fill:var(--neg)}svg.bond .tk.pos{fill:var(--accent)}
+svg.bond .dip{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+svg.bond .dipfill{fill:var(--ink)}
+svg.bond .cap{font-size:13px;fill:var(--muted);text-anchor:middle}
+.tray{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tok{display:flex;flex-direction:column;align-items:center;gap:0;padding:8px 6px;border:2px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;min-height:92px}
+.tok .d{font:700 30px/1.3 var(--f-mono)}
+.tok .tl{font-size:14.5px;font-weight:600}
+.tok .ts{font-size:13px;color:var(--muted)}
+.tok.neg .d{color:var(--neg)}.tok.pos .d{color:var(--accent)}
+.tok.sel{border-width:3px}
+.tok.neg.sel{border-color:var(--neg);background:var(--neg-soft)}
+.tok.pos.sel{border-color:var(--accent);background:var(--accent-soft)}
+.tok:disabled{cursor:default}
+
+/* feedback */
+.fb{border-radius:8px;padding:12px 14px;border:1.5px solid;display:flex;flex-direction:column;gap:4px}
+.fb.bad{background:var(--neg-soft);border-color:var(--neg)}
+.fb.good{background:var(--good-soft);border-color:var(--good)}
+.fb.info{background:var(--info-soft);border-color:#C99A2E}
+.ftag{font-weight:700;font-size:16px}
+.fb.bad .ftag{color:var(--neg)}.fb.good .ftag{color:var(--good)}.fb.info .ftag{color:var(--info)}
+.fmsg,.fx{margin:0;font-size:16.5px;line-height:1.75}
+.fx{font-weight:700}
+.d{font-family:var(--f-mono);font-weight:700}
+.d.neg{color:var(--neg)}.d.pos{color:var(--accent)}
+
+/* summary */
+.sum{border:2px solid var(--good);border-radius:8px;background:var(--good-soft);padding:14px;display:flex;flex-direction:column;gap:10px}
+.sum h3{margin:0;font-size:19px;color:var(--good)}
+.sum dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:16px}
+.sum dt{color:var(--muted)}.sum dd{margin:0;font-weight:600}
+
+/* matrix */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.tbl table{width:100%;border-collapse:collapse;min-width:330px}
+.tbl th{background:var(--bg);font-size:14px;font-weight:700;padding:8px 8px;text-align:center;border-bottom:1px solid var(--line)}
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:center;font:600 16px var(--f-mono)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .bnd{font-size:17px;white-space:nowrap}
+.tbl .sy{color:var(--muted);font-size:14px}
+.mopts{display:flex;flex-direction:column;gap:8px}
+.mopt{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:12px;min-height:56px;padding:8px 14px;border:2px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;width:100%;text-align:start}
+.mopt .rd{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--muted);background:#fff}
+.mopt .bn{font:700 19px var(--f-mono);direction:ltr;text-align:left}
+.mopt .bn small{font:500 13.5px var(--f-mono);color:var(--muted);margin-left:8px}
+.mopt .dv{font:700 19px var(--f-mono);direction:ltr}
+.mopt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.mopt.sel .rd{border-color:var(--accent);background:radial-gradient(circle,var(--accent) 0 45%,#fff 50%)}
+.mopt:disabled{cursor:default}
+.bars{display:flex;flex-direction:column;gap:8px}
+.brow{display:grid;grid-template-columns:72px 1fr 48px;align-items:center;gap:10px;direction:ltr}
+.brow .bl{font:700 16px var(--f-mono)}
+.brow .bt{height:20px;background:var(--bg);border-radius:4px;overflow:hidden}
+.brow .bt i{display:block;height:100%;background:var(--bar);border-radius:4px}
+.brow.top .bt i{background:var(--accent)}
+.brow .bv{font:700 15px var(--f-mono);text-align:right}
+.brow.top .bl,.brow.top .bv{color:var(--accent)}
+
+.foot{display:flex;flex-direction:column;gap:12px;font-size:14.5px;color:var(--muted)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 14px}
+summary{cursor:pointer;font-weight:700;color:var(--ink);min-height:32px;display:flex;align-items:center}
+details table{width:100%;border-collapse:collapse;margin-top:8px;font-size:15px}
+details td,details th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:start}
+details td.v{font:600 15px var(--f-mono);direction:ltr;text-align:right}
+@media (prefers-reduced-motion:no-preference){.fb{animation:rise .22s ease-out}@keyframes rise{from{opacity:.2;transform:translateY(4px)}to{opacity:1;transform:none}}}
+@media (max-width:420px){h1{font-size:24px}.formula{font-size:38px}.rmain{font-size:18px}.lv .lvn{font-size:14px}}
+</style>
+
+<div class="shell" dir="rtl" lang="ar">
+  <header class="top" id="top"></header>
+  <nav class="levels" id="levels" aria-label="مستويات التدريب"></nav>
+  <div class="chips" id="chips"></div>
+  <main id="main"></main>
+  <footer class="foot">
+    <details>
+      <summary>مرجع القيم والنطاقات</summary>
+      <table>
+        <tr><th>العنصر</th><th>العدد الذري</th><th style="text-align:right">الكهروسالبية EN</th></tr>
+        <tr><td>الهيدروجين H</td><td class="v">1</td><td class="v">2.20</td></tr>
+        <tr><td>الكربون C</td><td class="v">6</td><td class="v">2.55</td></tr>
+        <tr><td>النيتروجين N</td><td class="v">7</td><td class="v">3.04</td></tr>
+        <tr><td>الأكسجين O</td><td class="v">8</td><td class="v">3.44</td></tr>
+        <tr><td>الفلور F</td><td class="v">9</td><td class="v">3.98</td></tr>
+        <tr><td>الكلور Cl</td><td class="v">17</td><td class="v">3.16</td></tr>
+      </table>
+      <p>القيم وفق مقياس باولنغ. نطاقات التصنيف: غير قطبية ΔEN &lt; 0.5، قطبية 0.5 ≤ ΔEN ≤ 1.9، أيونية ΔEN &gt; 1.9.</p>
+    </details>
+    <div><button class="btn alt" data-act="reset" type="button">إعادة التدريب من البداية</button></div>
+  </footer>
+</div>
+
+<script>
+(function(){
+var EN={H:2.20,C:2.55,N:3.04,O:3.44,F:3.98,Cl:3.16};
+var ATOM={
+  H:{z:1,name:'الهيدروجين',r:30},C:{z:6,name:'الكربون',r:40},N:{z:7,name:'النيتروجين',r:40},
+  O:{z:8,name:'الأكسجين',r:40},F:{z:9,name:'الفلور',r:36},Cl:{z:17,name:'الكلور',r:46}
+};
+var CLS={
+  nonpolar:{ar:'رابطة تساهمية غير قطبية',en:'Nonpolar Covalent',range:'ΔEN < 0.5'},
+  polar:{ar:'رابطة تساهمية قطبية',en:'Polar Covalent',range:'0.5 ≤ ΔEN ≤ 1.9'},
+  ionic:{ar:'رابطة أيونية',en:'Ionic',range:'ΔEN > 1.9'}
+};
+var ROUNDS=[
+  {f:'المجموعة 1',bonds:[['H','F'],['H','Cl'],['H','O'],['H','N'],['H','C']]},
+  {f:'المجموعة 2',bonds:[['C','O'],['C','N'],['C','F'],['C','Cl'],['C','H']]},
+  {f:'المجموعة 3',bonds:[['N','O'],['N','F'],['O','H'],['C','Cl'],['N','H']]}
+];
+var LEVELS=[
+  {n:1,name:'المستوى الأول',tag:'أساسي',desc:'مركبات قياسية ثنائية الذرة وبسيطة: H₂ وCl₂ وHCl.',items:[
+    {f:'H<sub>2</sub>',a:'H',b:'H',note:'جزيء ثنائي الذرة يتكون من ذرتي هيدروجين متماثلتين.'},
+    {f:'Cl<sub>2</sub>',a:'Cl',b:'Cl',note:'جزيء ثنائي الذرة يتكون من ذرتي كلور متماثلتين.'},
+    {f:'HCl',a:'H',b:'Cl',note:'جزيء ثنائي الذرة يجمع ذرتين مختلفتين في الكهروسالبية.'}]},
+  {n:2,name:'المستوى الثاني',tag:'متقدم',desc:'مركبات متعددة الذرات ذات قطبية أعلى: HF وH₂O وNH₃.',items:[
+    {f:'HF',a:'H',b:'F',note:'الفلور أعلى العناصر كهروسالبية في الجدول الدوري.'},
+    {f:'H<sub>2</sub>O',a:'H',b:'O',note:'في الجزيء رابطتا O—H متماثلتان، وندرس إحداهما.'},
+    {f:'NH<sub>3</sub>',a:'N',b:'H',note:'في الجزيء ثلاث روابط N—H متماثلة، وندرس إحداها.'}]},
+  {n:3,name:'المستوى الثالث',tag:'التقييم الشامل',desc:'مصفوفة مقارنة بين عدة روابط لتحديد الرابطة الأكثر قطبية.',items:ROUNDS}
+];
+
+var S={level:1,idx:0,ok:0,tot:0,focus:null,refocus:null};
+var P={};
+function el(id){return document.getElementById(id)}
+function den(a,b){return Math.round(Math.abs(EN[a]-EN[b])*100)/100}
+function classify(d){return d<0.5?'nonpolar':(d<=1.9?'polar':'ionic')}
+function f2(n){return n.toFixed(2)}
+function norm(s){
+  return String(s||'').replace(/[٠-٩]/g,function(d){return '٠١٢٣٤٥٦٧٨٩'.indexOf(d)})
+    .replace(/[٫,،]/g,'.').replace(/[−–—]/g,'-').replace(/\s/g,'');
+}
+function isNum(r){return /^-?\d+(\.\d+)?$/.test(r)}
+function key(l,i){return (l||S.level)+'-'+(i===undefined?S.idx:i)}
+function getP(){
+  var k=key();
+  if(!P[k]){P[k]={step:1,att:{1:0,2:0,3:0},passed:{},fb:null,val:'',pick:null,sel:null,placed:{a:null,b:null},vals:[],st:[]}}
+  return P[k];
+}
+function isDone(l,i){var q=P[key(l,i)];return !!(q&&q.passed[l<3?3:2])}
+function doneCount(){var n=0;LEVELS.forEach(function(L){L.items.forEach(function(_,i){if(isDone(L.n,i))n++})});return n}
+function firstOpen(l){var L=LEVELS[l-1];for(var i=0;i<L.items.length;i++){if(!isDone(l,i))return i}return 0}
+function pass(p,step){p.passed[step]=true;S.tot++;if(p.att[step]===0)S.ok++}
+var D={neg:'δ<sup>−</sup>',pos:'δ<sup>+</sup>'};
+function dsym(t){return '<span class="d '+t+'">'+D[t]+'</span>'}
+function bd(s){return '<bdi dir="ltr" class="mono">'+s+'</bdi>'}
+
+/* ---------- pieces ---------- */
+function tile(s){
+  var A=ATOM[s];
+  return '<div class="tile" dir="ltr"><span class="z">'+A.z+'</span><span class="sym">'+s+'</span><span class="nm" dir="rtl">'+A.name+'</span><span class="en"><small>EN</small>'+f2(EN[s])+'</span></div>';
+}
+function stepper(names,p){
+  return '<ol class="steps">'+names.map(function(n,i){
+    var k=i+1,st=p.passed[k]?'done':(k===p.step?'cur':'todo');
+    return '<li class="'+st+'"'+(k===p.step?' aria-current="step"':'')+'><span class="num">'+(p.passed[k]?'✓':k)+'</span><span>'+n+'</span></li>';
+  }).join('')+'</ol>';
+}
+function reqBox(main,how,goal){
+  return '<div class="req"><span class="rtag">المطلوب منك</span><p class="rmain">'+main+'</p>'+
+    (how&&how.length?'<ol class="how">'+how.map(function(h){return '<li>'+h+'</li>'}).join('')+'</ol>':'')+
+    '<p class="goal"><b>الهدف التعليمي:</b> '+goal+'</p></div>';
+}
+function fbHTML(p){
+  if(!p.fb)return '';
+  var f=p.fb;
+  return '<div class="fb '+f.kind+'" role="'+(f.kind==='bad'?'alert':'status')+'"><div class="ftag">'+f.tag+'</div><p class="fmsg">'+f.msg+'</p>'+(f.extra?'<p class="fx">'+f.extra+'</p>':'')+'</div>';
+}
+function scale(d){
+  var pct=Math.min(d/3.5,1)*100;
+  return '<div class="scale" dir="ltr" aria-label="موضع ΔEN على مقياس التصنيف"><div class="zwrap"><div class="zones"><i class="z1" style="flex:0.5"></i><i class="z2" style="flex:1.4"></i><i class="z3" style="flex:1.6"></i></div><b class="mk" style="left:'+pct+'%"><span>'+f2(d)+'</span></b></div>'+
+    '<div class="ticks"><span style="left:0;transform:none">0</span><span style="left:14.29%">0.5</span><span style="left:54.29%">1.9</span><span style="left:100%;transform:translateX(-100%)">3.5</span></div></div>';
+}
+
+/* ---------- bond drawing ---------- */
+function svgBond(c,p,mode){
+  var A=ATOM[c.a],B=ATOM[c.b],xa=95,xb=265,cy=100,d=den(c.a,c.b);
+  var tie=EN[c.a]===EN[c.b],hiB=EN[c.b]>EN[c.a];
+  var shift=tie?0:(hiB?1:-1)*Math.min(d/2.4,1)*30;
+  var live=(mode==='ask');
+  var s='<svg class="bond" viewBox="0 0 360 224" role="img" aria-label="رسم الرابطة '+c.a+' و '+c.b+'">';
+  s+='<defs><radialGradient id="cloud" cx="'+(50+shift)+'%" cy="50%" r="55%"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.42"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/></radialGradient></defs>';
+  if(mode!=='ask'){s+='<ellipse cx="180" cy="100" rx="168" ry="80" fill="url(#cloud)"/>'}
+  s+='<line class="bline" x1="'+(xa+A.r)+'" y1="'+cy+'" x2="'+(xb-B.r)+'" y2="'+cy+'"/>';
+  function atom(side,x,a,r){
+    var g='<g class="atom'+(live?' live':'')+'"'+(live?' data-act="atom" data-side="'+side+'" tabindex="0" role="button" aria-label="الذرة '+a+'"':'')+'>';
+    g+='<circle class="body" cx="'+x+'" cy="'+cy+'" r="'+r+'"/><text class="sym" x="'+x+'" y="'+cy+'">'+a+'</text>';
+    g+='<text class="en" x="'+x+'" y="'+(cy+r+20)+'">EN '+f2(EN[a])+'</text>';
+    if(mode!=='nonpolar'){
+      var t=p.placed[side],sy=Math.max(cy-r-26,28);
+      g+='<g class="slot '+(t||'')+((p.sel&&!t&&live)?' target':'')+'"><circle cx="'+x+'" cy="'+sy+'" r="17"/>'+
+         (t?'<text class="tk '+t+'" x="'+x+'" y="'+sy+'">δ<tspan dy="-7" font-size="13">'+(t==='neg'?'−':'+')+'</tspan></text>':'')+'</g>';
+    }
+    return g+'</g>';
+  }
+  s+=atom('a',xa,c.a,A.r)+atom('b',xb,c.b,B.r);
+  if(mode==='solved'){
+    var pos=hiB?xa:xb,neg=hiB?xb:xa,dir=neg>pos?1:-1,y=196;
+    s+='<path class="dip" d="M'+pos+' '+(y-7)+' V'+(y+7)+' M'+(pos-6)+' '+y+' H'+(pos+6)+' M'+(pos+8*dir)+' '+y+' H'+(neg-dir*4)+'"/>';
+    s+='<polygon class="dipfill" points="'+(neg)+','+y+' '+(neg-dir*12)+','+(y-6)+' '+(neg-dir*12)+','+(y+6)+'"/>';
+    s+='<text class="cap" x="180" y="218">اتجاه الانزياح الإلكتروني نحو الذرة الأعلى كهروسالبية</text>';
+  }
+  if(mode==='nonpolar'){s+='<text class="cap" x="180" y="200">سحابة إلكترونية متماثلة: لا قطبية ولا شحنات جزئية</text>'}
+  return s+'</svg>';
+}
+
+/* ---------- main renders ---------- */
+function renderTop(){
+  var n=doneCount();
+  el('top').innerHTML='<div class="eyebrow" dir="ltr">ChemBond Simulation</div><h1>نظام محاكاة الروابط الكيميائية</h1>'+
+   '<p class="lede">تدرّب على حساب فرق الكهروسالبية، وتصنيف نوع الرابطة، وتوزيع الشحنات الجزئية، مع تغذية راجعة تشرح كل خطأ.</p>'+
+   '<div class="meter"><div class="mrow"><span>المهام المكتملة</span><b class="mono" dir="ltr">'+n+' / 9</b></div>'+
+   '<div class="track"><i style="width:'+(n/9*100)+'%"></i></div>'+
+   '<div class="mrow sm"><span>إجابات صحيحة من المحاولة الأولى</span><b class="mono" dir="ltr">'+S.ok+' / '+S.tot+'</b></div></div>';
+}
+function renderLevels(){
+  el('levels').innerHTML=LEVELS.map(function(L){
+    var done=L.items.filter(function(_,i){return isDone(L.n,i)}).length;
+    return '<button type="button" class="lv'+(L.n===S.level?' on':'')+'" data-act="level" data-n="'+L.n+'" aria-pressed="'+(L.n===S.level)+'"><span class="lvn">'+L.name+'</span><span class="lvt">'+L.tag+'</span><span class="lvc" dir="ltr">'+done+' / '+L.items.length+'</span></button>';
+  }).join('');
+  var L=LEVELS[S.level-1];
+  el('chips').innerHTML='<p class="ldesc">'+L.desc+'</p><div class="chiprow">'+L.items.map(function(c,i){
+    var dn=isDone(L.n,i);
+    return '<button type="button" class="chip'+(i===S.idx?' on':'')+'" data-act="item" data-i="'+i+'" aria-pressed="'+(i===S.idx)+'"><span dir="'+(L.n<3?'ltr':'rtl')+'">'+c.f+'</span>'+(dn?'<span class="ck" aria-label="مكتمل">✓</span>':'')+'</button>';
+  }).join('')+'</div>';
+}
+
+function mainBond(L,p){
+  var c=L.items[S.idx],d=den(c.a,c.b),cls=classify(d),ea=f2(EN[c.a]),eb=f2(EN[c.b]);
+  var bond=bd(c.a+' — '+c.b);
+  var h='<section class="card" aria-label="تحليل '+c.a+'—'+c.b+'">';
+  h+='<div class="chead"><div class="formula" dir="ltr">'+c.f+'</div><div class="cmeta"><div class="cbond">الرابطة المدروسة: '+bond+'</div><p class="cnote">'+c.note+'</p></div></div>';
+  h+='<div class="pair" dir="ltr">'+tile(c.a)+'<div class="link">—</div>'+tile(c.b)+'</div>';
+  h+=stepper(['حساب فرق الكهروسالبية','تصنيف الرابطة','الشحنات الجزئية'],p);
+  h+='<div class="qwrap">';
+  if(p.step===1){
+    h+=reqBox('احسب فرق الكهروسالبية <b>ΔEN</b> بين ذرتي الرابطة '+bond+'، ثم اكتب الناتج في الخانة.',
+      ['اقرأ قيمتي الكهروسالبية الظاهرتين في البطاقتين أعلاه.','اطرح إحداهما من الأخرى، ثم خذ القيمة المطلقة (الناتج لا يكون سالباً).','اكتب الرقم بخانتين عشريتين، مثل 0.96، ثم اضغط «تحقق».'],
+      'تحديد المقياس الكمي لمدى تباين الجذب الإلكتروني بين الذرتين المرتبطتين.');
+    var ok=p.passed[1];
+    h+='<div class="work"><div class="calc"><span>ΔEN = |</span><span class="n">'+ea+'</span><span>−</span><span class="n">'+eb+'</span><span>| =</span>'+
+      '<input id="ans" class="ans'+(ok?' ok':'')+'" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-label="قيمة ΔEN" value="'+(ok?f2(d):(p.val||''))+'"'+(ok?' readonly':'')+'></div>';
+    h+=fbHTML(p);
+    h+=ok?'<button type="button" class="btn full" data-act="next">التالي: تصنيف الرابطة</button>':'<button type="button" class="btn full" data-act="check1">تحقق</button>';
+    h+='</div>';
+  } else if(p.step===2){
+    h+=reqBox('اختر نوع الرابطة بين '+bond+' اعتماداً على قيمة ΔEN التي حسبتها: '+bd(f2(d))+'.',
+      ['قارن قيمة ΔEN بنطاقات التصنيف في الجدول أسفل الخيارات.','اضغط على نوع الرابطة الذي تقع القيمة ضمن نطاقه.','اضغط «تحقق» لتأكيد اختيارك.'],
+      'ربط القيمة العددية بنمط تشارك الإلكترونات أو انتقالها بين الذرتين.');
+    var ok2=p.passed[2];
+    h+='<div class="work"><div class="opts" role="radiogroup" aria-label="نوع الرابطة">'+Object.keys(CLS).map(function(k){
+      var right=ok2&&k===cls;
+      return '<button type="button" class="opt'+(right?' right':(p.pick===k?' sel':''))+'" role="radio" aria-checked="'+(p.pick===k)+'" data-act="pickcls" data-v="'+k+'"'+(ok2?' disabled':'')+'><span class="rd"></span><span class="ot"><span class="oen" dir="ltr">'+CLS[k].en+'</span><span class="oar">'+CLS[k].ar+'</span></span></button>';
+    }).join('')+'</div>';
+    h+='<div class="ranges"><div class="rtitle">نطاقات التصنيف المعيارية</div><table>'+Object.keys(CLS).map(function(k){return '<tr><td>'+CLS[k].ar+'</td><td>'+CLS[k].range+'</td></tr>'}).join('')+'</table></div>';
+    if(ok2)h+=scale(d);
+    h+=fbHTML(p);
+    h+=ok2?'<button type="button" class="btn full" data-act="next">التالي: الشحنات الجزئية</button>':'<button type="button" class="btn full" data-act="check2">تحقق</button>';
+    h+='</div>';
+  } else {
+    var polar=(cls!=='nonpolar'),ok3=p.passed[3];
+    if(polar){
+      h+=reqBox('وزّع الشحنتين الجزئيتين على ذرتي '+bond+': ضع '+dsym('neg')+' على إحدى الذرتين و'+dsym('pos')+' على الأخرى.',
+        ['اضغط على الرمز '+dsym('neg')+' أو '+dsym('pos')+' في الأسفل لاختياره.','اضغط على الذرة التي تريد وضع الرمز عليها.','اضغط «تحقق». ولإزالة رمز، اضغط على الذرة التي تحمله.'],
+        'تحديد اتجاه الانزياح الإلكتروني نحو الذرة الأعلى كهروسالبية، وتوزيع الشحنات على هيكل الذرات.');
+    } else {
+      h+=reqBox('اقرأ النتيجة: الرابطة '+bond+' غير قطبية، لذلك لا تُوزَّع عليها شحنات جزئية.',
+        ['لاحظ أن سحابة الإلكترونات متماثلة بين الذرتين.','اضغط «إنهاء التحليل» لعرض ملخص المركب.'],
+        'إدراك أن تساوي الكهروسالبية يعني تقاسماً متساوياً للإلكترونات وغياب القطبية.');
+    }
+    h+='<div class="work"><div class="bondbox">'+svgBond(c,p,polar?(ok3?'solved':'ask'):'nonpolar')+'</div>';
+    if(polar&&!ok3){
+      h+='<div class="tray" role="group" aria-label="رموز الشحنات الجزئية">'+['neg','pos'].map(function(t){
+        var where=p.placed.a===t?c.a:(p.placed.b===t?c.b:null);
+        return '<button type="button" class="tok '+t+(p.sel===t?' sel':'')+'" data-act="tok" data-v="'+t+'" aria-pressed="'+(p.sel===t)+'"><span class="d">'+D[t]+'</span><span class="tl">'+(t==='neg'?'شحنة جزئية سالبة':'شحنة جزئية موجبة')+'</span><span class="ts">'+(where?'موضوع على '+bd(where):'غير موضوع')+'</span></button>';
+      }).join('')+'</div>';
+    }
+    h+=fbHTML(p);
+    if(ok3){
+      h+=summaryBond(c,d,cls)+nextItemBtn();
+    } else if(polar){
+      h+='<button type="button" class="btn full" data-act="check3">تحقق</button>';
+    } else {
+      h+='<button type="button" class="btn full" data-act="finish0">إنهاء التحليل</button>';
+    }
+    h+='</div>';
+  }
+  return h+'</div></section>';
+}
+function summaryBond(c,d,cls){
+  var hi=EN[c.a]>EN[c.b]?c.a:c.b,lo=hi===c.a?c.b:c.a,polar=cls!=='nonpolar';
+  return '<div class="sum"><h3>اكتمل تحليل '+bd(c.a+' — '+c.b)+'</h3><dl><dt>ΔEN</dt><dd class="mono" dir="ltr">'+f2(d)+'</dd><dt>التصنيف</dt><dd>'+CLS[cls].ar+'</dd><dt>الشحنات</dt><dd>'+(polar?dsym('neg')+' على '+bd(hi)+' ، '+dsym('pos')+' على '+bd(lo):'لا توجد شحنات جزئية')+'</dd></dl></div>';
+}
+function nextItemBtn(){
+  var L=LEVELS[S.level-1];
+  if(S.idx<L.items.length-1)return '<button type="button" class="btn full" data-act="nextitem">المركب التالي</button>';
+  if(S.level<3)return '<button type="button" class="btn full" data-act="nextitem">الانتقال إلى '+LEVELS[S.level].name+'</button>';
+  return '<div class="fb good"><div class="ftag">أحسنت</div><p class="fmsg">أكملت المستويات الثلاثة. يمكنك إعادة التدريب من أسفل الصفحة.</p></div>';
+}
+
+function mainMatrix(L,p){
+  var R=L.items[S.idx],ds=R.bonds.map(function(b){return den(b[0],b[1])});
+  var max=Math.max.apply(null,ds),best=ds.indexOf(max);
+  var h='<section class="card" aria-label="'+R.f+'">';
+  h+='<div class="chead"><div class="formula m">'+R.f+'</div><div class="cmeta"><div class="cbond">مقارنة '+R.bonds.length+' روابط</div><p class="cnote">الهدف: إيجاد الرابطة التي يكون فيها تباين الجذب الإلكتروني أكبر ما يمكن.</p></div></div>';
+  h+=stepper(['حساب ΔEN لكل رابطة','تحديد الأكثر قطبية'],p);
+  h+='<div class="qwrap">';
+  if(p.step===1){
+    h+=reqBox('احسب ΔEN لكل رابطة من الروابط '+R.bonds.length+' في الجدول، واكتب الناتج في خانة كل صف.',
+      ['لكل صف: اطرح قيمتي EN ثم خذ القيمة المطلقة.','اكتب كل ناتج بخانتين عشريتين.','اضغط «تحقق من الصفوف»: تُقفل الصفوف الصحيحة ويبقى عليك تصحيح الباقي.'],
+      'بناء مصفوفة قيم ΔEN تمهّد للمقارنة بين الروابط.');
+    h+='<div class="work"><div class="tbl"><table><thead><tr><th>الرابطة</th><th>EN<sub>1</sub></th><th>EN<sub>2</sub></th><th>ΔEN</th></tr></thead><tbody>';
+    R.bonds.forEach(function(b,i){
+      var st=p.st[i],ok=st==='ok',v=ok?f2(ds[i]):(p.vals[i]||'');
+      h+='<tr><td class="bnd" dir="ltr">'+b[0]+' — '+b[1]+'</td><td dir="ltr"><span class="sy">'+b[0]+'</span> '+f2(EN[b[0]])+'</td><td dir="ltr"><span class="sy">'+b[1]+'</span> '+f2(EN[b[1]])+'</td>'+
+        '<td><input id="v'+i+'" class="cell'+(st?' '+st:'')+'" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-label="ΔEN للرابطة '+b[0]+' و '+b[1]+'" value="'+v+'"'+(ok?' readonly':'')+'></td></tr>';
+    });
+    h+='</tbody></table></div>'+fbHTML(p);
+    h+=p.passed[1]?'<button type="button" class="btn full" data-act="next">التالي: تحديد الأكثر قطبية</button>':'<button type="button" class="btn full" data-act="check31">تحقق من الصفوف</button>';
+    h+='</div>';
+  } else {
+    var ok2=p.passed[2];
+    h+=reqBox('من المصفوفة المكتملة، اختر <b>الرابطة الأكثر قطبية</b>.',
+      ['قارن قيم ΔEN في كل خيار.','الرابطة الأكثر قطبية هي صاحبة أكبر قيمة ΔEN.','اضغط على الرابطة ثم «تأكيد الاختيار».'],
+      'الاستدلال على القطبية النسبية للروابط عبر تعظيم قيمة ΔEN.');
+    h+='<div class="work"><div class="mopts" role="radiogroup" aria-label="الرابطة الأكثر قطبية">'+R.bonds.map(function(b,i){
+      return '<button type="button" class="mopt'+(p.pick===i?' sel':'')+'" role="radio" aria-checked="'+(p.pick===i)+'" data-act="pick3" data-i="'+i+'"'+(ok2?' disabled':'')+'><span class="rd"></span><span class="bn">'+b[0]+' — '+b[1]+'<small>|'+f2(EN[b[0]])+' − '+f2(EN[b[1]])+'|</small></span><span class="dv">'+f2(ds[i])+'</span></button>';
+    }).join('')+'</div>'+fbHTML(p);
+    if(ok2){
+      var order=ds.map(function(v,i){return i}).sort(function(x,y){return ds[y]-ds[x]});
+      h+='<div class="bars" aria-label="ترتيب الروابط حسب ΔEN">'+order.map(function(i){
+        return '<div class="brow'+(i===best?' top':'')+'"><span class="bl">'+R.bonds[i][0]+'—'+R.bonds[i][1]+'</span><span class="bt"><i style="width:'+(ds[i]/max*100)+'%"></i></span><span class="bv">'+f2(ds[i])+'</span></div>';
+      }).join('')+'</div>';
+      h+=nextItemBtn();
+    } else {
+      h+='<button type="button" class="btn full" data-act="check32">تأكيد الاختيار</button>';
+    }
+    h+='</div>';
+  }
+  return h+'</div></section>';
+}
+
+function render(){
+  renderTop();renderLevels();
+  var L=LEVELS[S.level-1],p=getP();
+  el('main').innerHTML=S.level<3?mainBond(L,p):mainMatrix(L,p);
+  if(S.focus){var f=el(S.focus);if(f){f.focus();if(f.select&&!f.readOnly)f.select()}S.focus=null}
+  else if(S.refocus){var r=document.querySelector(S.refocus);if(r)r.focus();S.refocus=null}
+}
+function scrollMain(){var m=el('chips');if(m&&m.scrollIntoView)m.scrollIntoView({block:'start'})}
+
+/* ---------- checks ---------- */
+var CALC_MSG='القيمة غير صحيحة. يجب اعتماد الفارق المطلق بين القيمتين المعطاتين للكهروسالبية بغض النظر عن الإشارة، لكونها تعبر عن مقياس القوة الجذبية المطلقة. يُرجى إعادة الاحتساب.';
+function check1(){
+  var c=LEVELS[S.level-1].items[S.idx],p=getP(),d=den(c.a,c.b);
+  p.val=el('ans').value;var raw=norm(p.val);
+  S.focus='ans';
+  if(!isNum(raw)){p.fb={kind:'info',tag:'[إدخال غير صالح]',msg:'اكتب القيمة رقماً فقط، مثل 0.96.'};return render()}
+  var v=parseFloat(raw);
+  if(Math.abs(v-d)<=0.005){
+    pass(p,1);S.focus=null;
+    p.fb={kind:'good',tag:'[إجابة صحيحة]',msg:'ΔEN = |'+f2(EN[c.a])+' − '+f2(EN[c.b])+'| = '+bd(f2(d))+'. '+(d===0?'الذرتان متماثلتان، فلا تباين في قدرتهما على جذب الإلكترونات.':'كلما زاد هذا الفرق زاد التباين في الجذب الإلكتروني بين الذرتين.')};
+  } else {
+    p.att[1]++;
+    var msg=CALC_MSG+(v<0?' لاحظ أن ناتجك سالب، والفرق المطلق لا يكون سالباً.':'');
+    var extra=p.att[1]>=2?'الحل: ΔEN = |'+f2(EN[c.a])+' − '+f2(EN[c.b])+'| = '+f2(d):'';
+    p.fb={kind:'bad',tag:'[تنبيه حسابي]',msg:msg,extra:extra};
+  }
+  render();
+}
+function check2(){
+  var c=LEVELS[S.level-1].items[S.idx],p=getP(),d=den(c.a,c.b),cls=classify(d);
+  if(!p.pick){p.fb={kind:'info',tag:'[اختر أولاً]',msg:'اضغط على أحد أنواع الرابطة ثم اضغط «تحقق».'};return render()}
+  if(p.pick===cls){
+    pass(p,2);
+    p.fb={kind:'good',tag:'[إجابة صحيحة]',msg:CLS[cls].ar+' ('+CLS[cls].en+')، لأن ΔEN = '+bd(f2(d))+' يقع ضمن النطاق '+bd(CLS[cls].range)+'.'};
+  } else {
+    p.att[2]++;
+    var why={
+      polar:'الرابطة تصنف كـ تساهمية قطبية (Polar Covalent)؛ لأن الفرق يقع ضمن نطاق التشارك غير المتساوي للإلكترونات، وليس انتقالاً تاماً للأيونات (أيونية) أو تقاسماً متلائماً تماماً (غير قطبية).',
+      nonpolar:'الرابطة تصنف كـ تساهمية غير قطبية (Nonpolar Covalent)؛ لأن الفرق أقل من 0.5، فتتقاسم الذرتان الإلكترونات تقاسماً متلائماً دون انجذاب لطرف، وليس تشاركاً غير متساوٍ (قطبية) ولا انتقالاً تاماً (أيونية).',
+      ionic:'الرابطة تصنف كـ أيونية (Ionic)؛ لأن الفرق أكبر من 1.9، فتنتقل الإلكترونات انتقالاً تاماً من ذرة إلى أخرى.'
+    }[cls];
+    p.fb={kind:'bad',tag:'[تصنيف غير دقيق]',msg:'التصنيف المختار لا يوافق القيمة الناتجة لفرق الكهروسالبية ('+bd(f2(d))+'). '+why,extra:'الإجابة الصحيحة: '+CLS[cls].ar+' ('+CLS[cls].en+')'};
+  }
+  render();
+}
+function check3(){
+  var c=LEVELS[S.level-1].items[S.idx],p=getP();
+  if(!p.placed.a||!p.placed.b){p.fb={kind:'info',tag:'[الرسم غير مكتمل]',msg:'ضع الرمزين '+dsym('neg')+' و'+dsym('pos')+' على الذرتين قبل الضغط على «تحقق».'};return render()}
+  var hi=EN[c.a]>EN[c.b]?'a':'b',lo=hi==='a'?'b':'a',hiS=c[hi],loS=c[lo];
+  if(p.placed[hi]==='neg'&&p.placed[lo]==='pos'){
+    pass(p,3);
+    p.fb={kind:'good',tag:'[إجابة صحيحة]',msg:dsym('neg')+' على '+bd(hiS)+' لأنها الأعلى كهروسالبية، و'+dsym('pos')+' على '+bd(loS)+'.'};
+  } else {
+    p.att[3]++;
+    p.fb={kind:'bad',tag:'[تصحيح قطبي]',msg:'تم عكس اتجاه القطبية. تُمنح الشحنة الجزئية السالبة ('+dsym('neg')+') دائماً للذرة ذات الكهروسالبية الأعلى نظراً لامتلاكها قدرة أعلى على جذب الكثافة الإلكترونية نحو نطاقها.',
+      extra:'الإجابة الصحيحة: '+'δ⁻ على '+hiS+' (EN = '+f2(EN[hiS])+')، وδ⁺ على '+loS+' (EN = '+f2(EN[loS])+').'};
+  }
+  render();
+}
+function check31(){
+  var R=LEVELS[2].items[S.idx],p=getP(),bad=[],first=-1;
+  R.bonds.forEach(function(b,i){
+    if(p.st[i]==='ok')return;
+    var inp=el('v'+i);p.vals[i]=inp.value;var raw=norm(inp.value),d=den(b[0],b[1]);
+    if(isNum(raw)&&Math.abs(parseFloat(raw)-d)<=0.005){p.st[i]='ok'}
+    else{p.st[i]='bad';bad.push(b[0]+'—'+b[1]);if(first<0)first=i}
+  });
+  if(bad.length){
+    p.att[1]++;
+    p.fb={kind:'bad',tag:'[تنبيه حسابي]',msg:CALC_MSG,extra:'راجع الصفوف: '+bad.join('، ')};
+    if(first>=0)S.focus='v'+first;
+  } else {
+    pass(p,1);
+    p.fb={kind:'good',tag:'[إجابة صحيحة]',msg:'اكتملت قيم ΔEN لكل الروابط. انتقل إلى المقارنة.'};
+  }
+  render();
+}
+function check32(){
+  var R=LEVELS[2].items[S.idx],p=getP(),ds=R.bonds.map(function(b){return den(b[0],b[1])});
+  var max=Math.max.apply(null,ds),best=ds.indexOf(max);
+  if(p.pick===null){p.fb={kind:'info',tag:'[اختر أولاً]',msg:'اضغط على إحدى الروابط ثم اضغط «تأكيد الاختيار».'};return render()}
+  var nm=function(i){return bd(R.bonds[i][0]+' — '+R.bonds[i][1])};
+  if(p.pick===best){
+    pass(p,2);
+    p.fb={kind:'good',tag:'[إجابة صحيحة]',msg:'الرابطة '+nm(best)+' هي الأكثر قطبية لأن ΔEN = '+bd(f2(max))+' هي الأكبر في المصفوفة.'};
+  } else {
+    p.att[2]++;
+    p.fb={kind:'bad',tag:'[ترتيب غير دقيق]',msg:'الرابطة المختارة '+nm(p.pick)+' قيمتها ΔEN = '+bd(f2(ds[p.pick]))+'، وتوجد في المصفوفة رابطة قيمتها أكبر. الرابطة الأكثر قطبية هي التي تُعظِّم ΔEN، وليست الأقل ولا الأقرب إلى الوسط.',
+      extra:p.att[2]>=2?'الإجابة الصحيحة: '+R.bonds[best][0]+' — '+R.bonds[best][1]+' (ΔEN = '+f2(max)+')':''};
+  }
+  render();
+}
+
+/* ---------- events ---------- */
+function act(a,d){
+  var p=getP(),c;
+  switch(a){
+    case 'level':S.level=+d.n;S.idx=firstOpen(S.level);render();break;
+    case 'item':S.idx=+d.i;render();break;
+    case 'check1':check1();break;
+    case 'pickcls':if(!p.passed[2]){p.pick=d.v;p.fb=null}S.refocus='[data-act="pickcls"][data-v="'+d.v+'"]';render();break;
+    case 'check2':check2();break;
+    case 'tok':
+      if(!p.passed[3]){p.sel=(p.sel===d.v)?null:d.v}
+      S.refocus='[data-act="tok"][data-v="'+d.v+'"]';render();break;
+    case 'atom':
+      if(p.passed[3])break;
+      var s=d.side,t=p.placed[s];
+      if(p.sel){
+        ['a','b'].forEach(function(k){if(p.placed[k]===p.sel)p.placed[k]=null});
+        p.placed[s]=p.sel;
+        var other=p.sel==='neg'?'pos':'neg';
+        p.sel=(p.placed.a===other||p.placed.b===other)?null:other;
+        p.fb=null;
+      } else if(t){p.placed[s]=null;p.fb=null}
+      S.refocus='[data-act="atom"][data-side="'+s+'"]';render();break;
+    case 'check3':check3();break;
+    case 'finish0':c=LEVELS[S.level-1].items[S.idx];p.passed[3]=true;p.fb=null;render();break;
+    case 'next':
+      p.step++;p.fb=null;
+      if(S.level<3&&p.step===3){c=LEVELS[S.level-1].items[S.idx];if(classify(den(c.a,c.b))==='nonpolar'){p.fb={kind:'info',tag:'[قراءة النتيجة]',msg:'الذرتان متماثلتان في الكهروسالبية، فلا انزياح للإلكترونات نحو أي منهما.'}}}
+      render();
+      if(p.step===1)S.focus='ans';
+      var q=document.querySelector('.steps');if(q&&q.scrollIntoView)q.scrollIntoView({block:'start'});
+      break;
+    case 'check31':check31();break;
+    case 'pick3':if(!p.passed[2]){p.pick=+d.i;p.fb=null}S.refocus='[data-act="pick3"][data-i="'+d.i+'"]';render();break;
+    case 'check32':check32();break;
+    case 'nextitem':
+      var L=LEVELS[S.level-1];
+      if(S.idx<L.items.length-1)S.idx++;else if(S.level<3){S.level++;S.idx=firstOpen(S.level)}
+      render();scrollMain();break;
+    case 'reset':P={};S.level=1;S.idx=0;S.ok=0;S.tot=0;render();window.scrollTo(0,0);break;
+  }
+}
+document.addEventListener('click',function(e){
+  var t=e.target.closest&&e.target.closest('[data-act]');
+  if(!t||t.disabled)return;
+  act(t.getAttribute('data-act'),{n:t.getAttribute('data-n'),i:t.getAttribute('data-i'),v:t.getAttribute('data-v'),side:t.getAttribute('data-side')});
+});
+document.addEventListener('keydown',function(e){
+  var t=e.target,id=t.id||'';
+  if(e.key==='Enter'){
+    if(id==='ans'){e.preventDefault();act('check1',{})}
+    else if(/^v\d+$/.test(id)){e.preventDefault();act('check31',{})}
+  }
+  if((e.key==='Enter'||e.key===' ')&&t.getAttribute&&t.getAttribute('data-act')==='atom'){
+    e.preventDefault();act('atom',{side:t.getAttribute('data-side')});
+  }
+});
+document.addEventListener('input',function(e){
+  var id=e.target.id||'',p=getP();
+  if(id==='ans')p.val=e.target.value;
+  else if(/^v\d+$/.test(id)){var i=+id.slice(1);p.vals[i]=e.target.value;if(p.st[i]==='bad'){p.st[i]=null;e.target.classList.remove('bad')}}
+});
+render();
+})();
+</script>
+
+</body></html>
